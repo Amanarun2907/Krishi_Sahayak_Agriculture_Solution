@@ -138,7 +138,13 @@ with tab1:
                     if "Crop Health" in model_choice:
                         model_path = Path(MODELS_DIR) / "crop_health_model.h5"
                         if model_path.exists():
-                            model = tf.keras.models.load_model(str(model_path))
+                            try:
+                                # Try loading with compile=False to avoid custom object issues
+                                model = tf.keras.models.load_model(str(model_path), compile=False)
+                                st.info(f"✅ Model loaded successfully from: {model_path}")
+                            except Exception as load_error:
+                                st.error(f"❌ Error loading model: {str(load_error)}")
+                                raise load_error
                             
                             # Preprocess image
                             img_resized = cv2.resize(image_np, (224, 224))
@@ -154,6 +160,7 @@ with tab1:
                             
                             # Get last conv layer
                             last_conv_layer = get_last_conv_layer_name(model)
+                            st.info(f"🔍 Using convolutional layer: {last_conv_layer}")
                             
                             # Generate Grad-CAM
                             heatmap = make_gradcam_heatmap(img_array, model, last_conv_layer, pred_class)
@@ -221,11 +228,13 @@ with tab1:
                             """)
                             
                         else:
-                            st.error("❌ Crop Health model not found. Please train the model first.")
+                            st.error(f"❌ Crop Health model not found at: {model_path}")
+                            st.info("💡 Please ensure the model is trained and saved in the correct location.")
+                            raise FileNotFoundError(f"Model not found at {model_path}")
                     
                 except Exception as e:
                     st.error(f"❌ Error generating Grad-CAM: {str(e)}")
-                    st.info("💡 Using demo visualization...")
+                    st.warning("💡 Showing demo visualization instead...")
                     
                     # Demo visualization
                     img_resized = cv2.resize(image_np, (224, 224))
