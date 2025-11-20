@@ -18,3 +18,4 @@ tqdm>=4.65.0
 httpx>=0.24.0
 lime
 scikit-image
+reportlab>=4.0.0
