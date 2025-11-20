@@ -136,10 +136,19 @@ with tab1:
                 model_available = False
                 
                 try:
-                    # Load model
+                    # Load model based on selection
                     if "Crop Health" in model_choice:
                         model_path = Path(MODELS_DIR) / "crop_health_model.h5"
-                        if model_path.exists():
+                        class_names = MODEL_CONFIGS['crop_health']['class_names']
+                    elif "Multi-Task" in model_choice:
+                        model_path = Path(MODELS_DIR) / "multi_task_model.h5"
+                        class_names = MODEL_CONFIGS['unified_model']['crop_health_classes']
+                    else:
+                        st.error("❌ Unknown model selection")
+                        model_available = False
+                        model_path = None
+                    
+                    if model_path and model_path.exists():
                             try:
                                 # Try loading with compile=False to avoid custom object issues
                                 model = tf.keras.models.load_model(str(model_path), compile=False)
@@ -156,8 +165,16 @@ with tab1:
                                 img_array = np.expand_dims(img_normalized, axis=0)
                                 
                                 # Get prediction
-                                predictions = model.predict(img_array, verbose=0)[0]
-                                class_names = MODEL_CONFIGS['crop_health']['class_names']
+                                predictions = model.predict(img_array, verbose=0)
+                                
+                                # Handle multi-task model output (returns multiple outputs)
+                                if "Multi-Task" in model_choice and isinstance(predictions, list):
+                                    # Multi-task model returns [crop_health, pest, weed, irrigation]
+                                    # Use the first output (crop health)
+                                    predictions = predictions[0][0]
+                                else:
+                                    predictions = predictions[0]
+                                
                                 pred_class = np.argmax(predictions)
                                 pred_label = class_names[pred_class]
                                 confidence = predictions[pred_class]
@@ -229,19 +246,20 @@ with tab1:
                                 - If these regions match the actual problem area (e.g., diseased leaves), the model is working correctly
                                 - If the model is looking at irrelevant areas, it may need retraining
                                 """)
-                        else:
-                            st.warning(f"⚠️ Model file not found on Streamlit Cloud")
-                            st.info("""
-                            📝 **Note:** Model files are too large for GitHub and are not deployed to Streamlit Cloud.
-                            
-                            **To use real models:**
-                            1. Upload models to cloud storage (Google Drive, AWS S3, etc.)
-                            2. Download them at runtime using `@st.cache_resource`
-                            3. Or use Git LFS for large files
-                            
-                            **For now, showing demo visualization...**
-                            """)
-                            model_available = False
+                    else:
+                        if model_path:
+                            st.warning(f"⚠️ Model file not found: {model_path.name}")
+                        st.info("""
+                        📝 **Note:** Model files are too large for GitHub and are not deployed to Streamlit Cloud.
+                        
+                        **To use real models:**
+                        1. Upload models to cloud storage (Google Drive, AWS S3, etc.)
+                        2. Download them at runtime using `@st.cache_resource`
+                        3. Or use Git LFS for large files
+                        
+                        **For now, showing demo visualization...**
+                        """)
+                        model_available = False
                     
                 except Exception as e:
                     st.warning(f"⚠️ Error: {str(e)}")
