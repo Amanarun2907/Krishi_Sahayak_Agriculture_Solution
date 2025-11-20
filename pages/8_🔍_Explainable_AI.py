@@ -133,6 +133,8 @@ with tab1:
         
         if st.button("🚀 Generate Grad-CAM", key="gradcam_button"):
             with st.spinner("Generating Grad-CAM visualization..."):
+                model_available = False
+                
                 try:
                     # Load model
                     if "Crop Health" in model_choice:
@@ -141,114 +143,203 @@ with tab1:
                             try:
                                 # Try loading with compile=False to avoid custom object issues
                                 model = tf.keras.models.load_model(str(model_path), compile=False)
-                                st.info(f"✅ Model loaded successfully from: {model_path}")
+                                model_available = True
+                                st.success(f"✅ Model loaded successfully!")
                             except Exception as load_error:
-                                st.error(f"❌ Error loading model: {str(load_error)}")
-                                raise load_error
+                                st.warning(f"⚠️ Could not load model: {str(load_error)}")
+                                model_available = False
                             
-                            # Preprocess image
-                            img_resized = cv2.resize(image_np, (224, 224))
-                            img_normalized = img_resized / 255.0
-                            img_array = np.expand_dims(img_normalized, axis=0)
-                            
-                            # Get prediction
-                            predictions = model.predict(img_array, verbose=0)[0]
-                            class_names = MODEL_CONFIGS['crop_health']['class_names']
-                            pred_class = np.argmax(predictions)
-                            pred_label = class_names[pred_class]
-                            confidence = predictions[pred_class]
-                            
-                            # Get last conv layer
-                            last_conv_layer = get_last_conv_layer_name(model)
-                            st.info(f"🔍 Using convolutional layer: {last_conv_layer}")
-                            
-                            # Generate Grad-CAM
-                            heatmap = make_gradcam_heatmap(img_array, model, last_conv_layer, pred_class)
-                            
-                            # Create overlay
-                            overlay, heatmap_colored = create_gradcam_overlay(img_resized, heatmap, alpha)
-                            
-                            # Display results
-                            st.success(f"✅ Prediction: **{pred_label}** (Confidence: {confidence*100:.1f}%)")
-                            
-                            col1, col2, col3 = st.columns(3)
-                            
-                            with col1:
-                                st.subheader("Original Image")
-                                st.image(img_resized, use_container_width=True)
-                            
-                            with col2:
-                                st.subheader("Grad-CAM Heatmap")
-                                st.image(heatmap_colored, use_container_width=True)
-                            
-                            with col3:
-                                st.subheader("Overlay")
-                                st.image(overlay, use_container_width=True)
-                            
-                            # Region importance
-                            st.markdown("### 📊 Region Importance Analysis")
-                            regions = get_region_importance_scores(heatmap, num_regions=5)
-                            
-                            if regions:
-                                # Create bar chart
-                                region_names = [f"Region {i+1}" for i in range(len(regions))]
-                                scores = [r['score'] for r in regions]
+                            if model_available:
+                                # Preprocess image
+                                img_resized = cv2.resize(image_np, (224, 224))
+                                img_normalized = img_resized / 255.0
+                                img_array = np.expand_dims(img_normalized, axis=0)
                                 
-                                fig = go.Figure(data=[
-                                    go.Bar(
-                                        x=region_names,
-                                        y=scores,
-                                        marker_color='indianred',
-                                        text=[f"{s:.3f}" for s in scores],
-                                        textposition='auto'
+                                # Get prediction
+                                predictions = model.predict(img_array, verbose=0)[0]
+                                class_names = MODEL_CONFIGS['crop_health']['class_names']
+                                pred_class = np.argmax(predictions)
+                                pred_label = class_names[pred_class]
+                                confidence = predictions[pred_class]
+                                
+                                # Get last conv layer
+                                last_conv_layer = get_last_conv_layer_name(model)
+                                
+                                # Generate Grad-CAM
+                                heatmap = make_gradcam_heatmap(img_array, model, last_conv_layer, pred_class)
+                                
+                                # Create overlay
+                                overlay, heatmap_colored = create_gradcam_overlay(img_resized, heatmap, alpha)
+                                
+                                # Display results
+                                st.success(f"✅ Prediction: **{pred_label}** (Confidence: {confidence*100:.1f}%)")
+                                
+                                col1, col2, col3 = st.columns(3)
+                                
+                                with col1:
+                                    st.subheader("Original Image")
+                                    st.image(img_resized, use_container_width=True)
+                                
+                                with col2:
+                                    st.subheader("Grad-CAM Heatmap")
+                                    st.image(heatmap_colored, use_container_width=True)
+                                
+                                with col3:
+                                    st.subheader("Overlay")
+                                    st.image(overlay, use_container_width=True)
+                                
+                                # Region importance
+                                st.markdown("### 📊 Region Importance Analysis")
+                                regions = get_region_importance_scores(heatmap, num_regions=5)
+                                
+                                if regions:
+                                    # Create bar chart
+                                    region_names = [f"Region {i+1}" for i in range(len(regions))]
+                                    scores = [r['score'] for r in regions]
+                                    
+                                    fig = go.Figure(data=[
+                                        go.Bar(
+                                            x=region_names,
+                                            y=scores,
+                                            marker_color='indianred',
+                                            text=[f"{s:.3f}" for s in scores],
+                                            textposition='auto'
+                                        )
+                                    ])
+                                    
+                                    fig.update_layout(
+                                        title="Top 5 Most Important Regions",
+                                        xaxis_title="Region",
+                                        yaxis_title="Importance Score",
+                                        height=400
                                     )
-                                ])
+                                    
+                                    st.plotly_chart(fig, use_container_width=True)
+                                    
+                                    # Show region details
+                                    st.markdown("#### Region Details:")
+                                    for i, region in enumerate(regions):
+                                        x, y, w, h = region['bbox']
+                                        st.write(f"**Region {i+1}:** Position ({x}, {y}), Size ({w}×{h}), Score: {region['score']:.3f}")
                                 
-                                fig.update_layout(
-                                    title="Top 5 Most Important Regions",
-                                    xaxis_title="Region",
-                                    yaxis_title="Importance Score",
-                                    height=400
-                                )
-                                
-                                st.plotly_chart(fig, use_container_width=True)
-                                
-                                # Show region details
-                                st.markdown("#### Region Details:")
-                                for i, region in enumerate(regions):
-                                    x, y, w, h = region['bbox']
-                                    st.write(f"**Region {i+1}:** Position ({x}, {y}), Size ({w}×{h}), Score: {region['score']:.3f}")
-                            
-                            # Interpretation guide
-                            st.info("""
-                            💡 **How to Interpret:**
-                            - The model focused on **red/yellow regions** to make its prediction
-                            - If these regions match the actual problem area (e.g., diseased leaves), the model is working correctly
-                            - If the model is looking at irrelevant areas, it may need retraining
-                            """)
-                            
+                                # Interpretation guide
+                                st.info("""
+                                💡 **How to Interpret:**
+                                - The model focused on **red/yellow regions** to make its prediction
+                                - If these regions match the actual problem area (e.g., diseased leaves), the model is working correctly
+                                - If the model is looking at irrelevant areas, it may need retraining
+                                """)
                         else:
-                            st.error(f"❌ Crop Health model not found at: {model_path}")
-                            st.info("💡 Please ensure the model is trained and saved in the correct location.")
-                            raise FileNotFoundError(f"Model not found at {model_path}")
+                            st.warning(f"⚠️ Model file not found on Streamlit Cloud")
+                            st.info("""
+                            📝 **Note:** Model files are too large for GitHub and are not deployed to Streamlit Cloud.
+                            
+                            **To use real models:**
+                            1. Upload models to cloud storage (Google Drive, AWS S3, etc.)
+                            2. Download them at runtime using `@st.cache_resource`
+                            3. Or use Git LFS for large files
+                            
+                            **For now, showing demo visualization...**
+                            """)
+                            model_available = False
                     
                 except Exception as e:
-                    st.error(f"❌ Error generating Grad-CAM: {str(e)}")
-                    st.warning("💡 Showing demo visualization instead...")
+                    st.warning(f"⚠️ Error: {str(e)}")
+                    model_available = False
+                
+                # Demo visualization when model is not available
+                if not model_available:
+                    st.info("🎨 **Demo Mode:** Showing simulated Grad-CAM visualization")
                     
-                    # Demo visualization
+                    # Create more realistic demo heatmap based on image features
                     img_resized = cv2.resize(image_np, (224, 224))
-                    demo_heatmap = np.random.rand(7, 7)
-                    demo_heatmap = cv2.resize(demo_heatmap, (224, 224))
+                    
+                    # Convert to grayscale and detect edges for more realistic heatmap
+                    gray = cv2.cvtColor(img_resized, cv2.COLOR_RGB2GRAY)
+                    edges = cv2.Canny(gray, 50, 150)
+                    
+                    # Create heatmap based on edge density
+                    demo_heatmap = cv2.GaussianBlur(edges.astype(float) / 255.0, (21, 21), 0)
+                    
+                    # Add some randomness to make it look more like attention
+                    demo_heatmap = demo_heatmap * 0.7 + np.random.rand(224, 224) * 0.3
+                    demo_heatmap = (demo_heatmap - demo_heatmap.min()) / (demo_heatmap.max() - demo_heatmap.min() + 1e-10)
+                    
+                    # Create overlay
                     overlay, heatmap_colored = create_gradcam_overlay(img_resized, demo_heatmap, alpha)
+                    
+                    # Simulate prediction
+                    class_names = MODEL_CONFIGS['crop_health']['class_names']
+                    demo_pred_label = np.random.choice(class_names)
+                    demo_confidence = np.random.uniform(75, 95)
+                    
+                    st.warning(f"🎭 **Demo Prediction:** {demo_pred_label} (Confidence: {demo_confidence:.1f}%)")
+                    st.caption("⚠️ This is a simulated result for demonstration purposes only")
                     
                     col1, col2, col3 = st.columns(3)
                     with col1:
-                        st.image(img_resized, caption="Original", use_container_width=True)
+                        st.subheader("Original Image")
+                        st.image(img_resized, use_container_width=True)
                     with col2:
-                        st.image(heatmap_colored, caption="Heatmap (Demo)", use_container_width=True)
+                        st.subheader("Grad-CAM Heatmap (Demo)")
+                        st.image(heatmap_colored, use_container_width=True)
                     with col3:
-                        st.image(overlay, caption="Overlay (Demo)", use_container_width=True)
+                        st.subheader("Overlay (Demo)")
+                        st.image(overlay, use_container_width=True)
+                    
+                    # Demo region importance
+                    st.markdown("### 📊 Region Importance Analysis (Demo)")
+                    
+                    # Generate demo regions
+                    demo_regions = []
+                    for i in range(5):
+                        demo_regions.append({
+                            'bbox': (np.random.randint(0, 150), np.random.randint(0, 150), 
+                                    np.random.randint(30, 70), np.random.randint(30, 70)),
+                            'score': np.random.uniform(0.5, 1.0),
+                            'area': np.random.randint(900, 4900)
+                        })
+                    demo_regions = sorted(demo_regions, key=lambda x: x['score'], reverse=True)
+                    
+                    # Create bar chart
+                    region_names = [f"Region {i+1}" for i in range(len(demo_regions))]
+                    scores = [r['score'] for r in demo_regions]
+                    
+                    fig = go.Figure(data=[
+                        go.Bar(
+                            x=region_names,
+                            y=scores,
+                            marker_color='indianred',
+                            text=[f"{s:.3f}" for s in scores],
+                            textposition='auto'
+                        )
+                    ])
+                    
+                    fig.update_layout(
+                        title="Top 5 Most Important Regions (Demo)",
+                        xaxis_title="Region",
+                        yaxis_title="Importance Score",
+                        height=400
+                    )
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Show region details
+                    st.markdown("#### Region Details (Demo):")
+                    for i, region in enumerate(demo_regions):
+                        x, y, w, h = region['bbox']
+                        st.write(f"**Region {i+1}:** Position ({x}, {y}), Size ({w}×{h}), Score: {region['score']:.3f}")
+                    
+                    # Interpretation guide
+                    st.info("""
+                    💡 **How to Interpret (Demo):**
+                    - The heatmap shows areas where an AI model would typically focus
+                    - **Red/yellow regions** indicate high attention areas
+                    - **Blue regions** indicate low attention areas
+                    - In a real model, these would correspond to actual features the model learned
+                    
+                    ⚠️ **Note:** This is a demonstration. For real Grad-CAM analysis, the model files need to be available.
+                    """)
 
 # ==================== TAB 2: LIME ====================
 with tab2:
@@ -334,140 +425,164 @@ with tab2:
         
         if st.button("🚀 Generate LIME Explanation", key="lime_button"):
             with st.spinner("Generating LIME explanation..."):
+                model_available = False
+                lime_available = False
+                
+                # Check if LIME is installed
                 try:
-                    # Try to import lime
                     from lime import lime_image
                     from skimage.segmentation import quickshift, mark_boundaries
-                    
-                    # Load model
-                    model_path = Path(MODELS_DIR) / "crop_health_model.h5"
-                    if model_path.exists():
-                        model = tf.keras.models.load_model(str(model_path))
-                        
-                        # Preprocess
-                        img_resized = cv2.resize(image_np, (224, 224))
-                        
-                        # Create explainer
-                        explainer = lime_image.LimeImageExplainer()
-                        
-                        # Prediction function
-                        def predict_fn(images):
-                            processed = []
-                            for img in images:
-                                img_norm = img / 255.0
-                                processed.append(img_norm)
-                            processed = np.array(processed)
-                            return model.predict(processed, verbose=0)
-                        
-                        # Generate explanation
-                        explanation = explainer.explain_instance(
-                            img_resized,
-                            predict_fn,
-                            top_labels=3,
-                            hide_color=0,
-                            num_samples=num_samples
-                        )
-                        
-                        # Get prediction
-                        predictions = model.predict(np.expand_dims(img_resized/255.0, axis=0), verbose=0)[0]
-                        class_names = MODEL_CONFIGS['crop_health']['class_names']
-                        pred_class = np.argmax(predictions)
-                        
-                        # Get image and mask
-                        temp, mask = explanation.get_image_and_mask(
-                            pred_class,
-                            positive_only=False,
-                            num_features=10,
-                            hide_rest=False
-                        )
-                        
-                        # Display results
-                        st.success(f"✅ Prediction: **{class_names[pred_class]}** (Confidence: {predictions[pred_class]*100:.1f}%)")
-                        
-                        col1, col2, col3 = st.columns(3)
-                        
-                        with col1:
-                            st.subheader("Original Image")
-                            st.image(img_resized, use_container_width=True)
-                        
-                        with col2:
-                            st.subheader("LIME Explanation")
-                            # Show boundaries
-                            img_boundary = mark_boundaries(temp/255.0, mask)
-                            st.image(img_boundary, use_container_width=True)
-                        
-                        with col3:
-                            st.subheader("Important Regions")
-                            # Show only positive contributions
-                            temp_pos, mask_pos = explanation.get_image_and_mask(
-                                pred_class,
-                                positive_only=True,
-                                num_features=5,
-                                hide_rest=True
-                            )
-                            st.image(temp_pos, use_container_width=True)
-                        
-                        # Feature importance
-                        st.markdown("### 📊 Superpixel Importance")
-                        
-                        # Get local explanation
-                        local_exp = explanation.local_exp[pred_class]
-                        
-                        # Sort by importance
-                        sorted_exp = sorted(local_exp, key=lambda x: abs(x[1]), reverse=True)[:10]
-                        
-                        # Create bar chart
-                        segments = [f"Segment {x[0]}" for x in sorted_exp]
-                        scores = [x[1] for x in sorted_exp]
-                        colors = ['green' if s > 0 else 'red' for s in scores]
-                        
-                        fig = go.Figure(data=[
-                            go.Bar(
-                                y=segments,
-                                x=scores,
-                                orientation='h',
-                                marker_color=colors,
-                                text=[f"{s:.3f}" for s in scores],
-                                textposition='auto'
-                            )
-                        ])
-                        
-                        fig.update_layout(
-                            title="Top 10 Superpixel Contributions",
-                            xaxis_title="Contribution Score",
-                            yaxis_title="Superpixel",
-                            height=500
-                        )
-                        
-                        st.plotly_chart(fig, use_container_width=True)
-                        
-                        st.info("""
-                        💡 **How to Interpret:**
-                        - 🟢 **Green bars**: Positive contribution (supports the prediction)
-                        - 🔴 **Red bars**: Negative contribution (against the prediction)
-                        - Larger absolute values = More important regions
-                        - The highlighted regions in the middle image show which parts influenced the decision
-                        """)
-                    
-                    else:
-                        st.error("❌ Model not found. Using demo visualization.")
-                        raise FileNotFoundError("Model not found")
-                
+                    lime_available = True
                 except ImportError:
-                    st.warning("⚠️ LIME library not installed. Showing simplified demo.")
+                    lime_available = False
+                    st.warning("⚠️ LIME library not installed. Showing demo visualization.")
                     st.info("""
-                    📦 **To install LIME:**
+                    📦 **To install LIME locally:**
                     ```bash
                     pip install lime
                     pip install scikit-image
                     ```
                     """)
+                
+                # Check if model exists
+                try:
+                    model_path = Path(MODELS_DIR) / "crop_health_model.h5"
+                    if model_path.exists() and lime_available:
+                        try:
+                            model = tf.keras.models.load_model(str(model_path), compile=False)
+                            model_available = True
+                            st.success("✅ Model loaded successfully!")
+                        except Exception as load_error:
+                            st.warning(f"⚠️ Could not load model: {str(load_error)}")
+                            model_available = False
+                        
+                        if model_available:
+                            # Preprocess
+                            img_resized = cv2.resize(image_np, (224, 224))
+                            
+                            # Create explainer
+                            explainer = lime_image.LimeImageExplainer()
+                            
+                            # Prediction function
+                            def predict_fn(images):
+                                processed = []
+                                for img in images:
+                                    img_norm = img / 255.0
+                                    processed.append(img_norm)
+                                processed = np.array(processed)
+                                return model.predict(processed, verbose=0)
+                            
+                            # Generate explanation
+                            explanation = explainer.explain_instance(
+                                img_resized,
+                                predict_fn,
+                                top_labels=3,
+                                hide_color=0,
+                                num_samples=num_samples
+                            )
+                            
+                            # Get prediction
+                            predictions = model.predict(np.expand_dims(img_resized/255.0, axis=0), verbose=0)[0]
+                            class_names = MODEL_CONFIGS['crop_health']['class_names']
+                            pred_class = np.argmax(predictions)
+                            
+                            # Get image and mask
+                            temp, mask = explanation.get_image_and_mask(
+                                pred_class,
+                                positive_only=False,
+                                num_features=10,
+                                hide_rest=False
+                            )
+                            
+                            # Display results
+                            st.success(f"✅ Prediction: **{class_names[pred_class]}** (Confidence: {predictions[pred_class]*100:.1f}%)")
+                            
+                            col1, col2, col3 = st.columns(3)
+                            
+                            with col1:
+                                st.subheader("Original Image")
+                                st.image(img_resized, use_container_width=True)
+                            
+                            with col2:
+                                st.subheader("LIME Explanation")
+                                # Show boundaries
+                                img_boundary = mark_boundaries(temp/255.0, mask)
+                                st.image(img_boundary, use_container_width=True)
+                            
+                            with col3:
+                                st.subheader("Important Regions")
+                                # Show only positive contributions
+                                temp_pos, mask_pos = explanation.get_image_and_mask(
+                                    pred_class,
+                                    positive_only=True,
+                                    num_features=5,
+                                    hide_rest=True
+                                )
+                                st.image(temp_pos, use_container_width=True)
+                            
+                            # Feature importance
+                            st.markdown("### 📊 Superpixel Importance")
+                            
+                            # Get local explanation
+                            local_exp = explanation.local_exp[pred_class]
+                            
+                            # Sort by importance
+                            sorted_exp = sorted(local_exp, key=lambda x: abs(x[1]), reverse=True)[:10]
+                            
+                            # Create bar chart
+                            segments = [f"Segment {x[0]}" for x in sorted_exp]
+                            scores = [x[1] for x in sorted_exp]
+                            colors = ['green' if s > 0 else 'red' for s in scores]
+                            
+                            fig = go.Figure(data=[
+                                go.Bar(
+                                    y=segments,
+                                    x=scores,
+                                    orientation='h',
+                                    marker_color=colors,
+                                    text=[f"{s:.3f}" for s in scores],
+                                    textposition='auto'
+                                )
+                            ])
+                            
+                            fig.update_layout(
+                                title="Top 10 Superpixel Contributions",
+                                xaxis_title="Contribution Score",
+                                yaxis_title="Superpixel",
+                                height=500
+                            )
+                            
+                            st.plotly_chart(fig, use_container_width=True)
+                            
+                            st.info("""
+                            💡 **How to Interpret:**
+                            - 🟢 **Green bars**: Positive contribution (supports the prediction)
+                            - 🔴 **Red bars**: Negative contribution (against the prediction)
+                            - Larger absolute values = More important regions
+                            - The highlighted regions in the middle image show which parts influenced the decision
+                            """)
+                    else:
+                        if not model_path.exists():
+                            st.warning("⚠️ Model file not found on Streamlit Cloud")
+                            st.info("""
+                            📝 **Note:** Model files are too large for GitHub and are not deployed to Streamlit Cloud.
+                            
+                            **For now, showing demo visualization...**
+                            """)
+                        model_available = False
+                
+                except Exception as e:
+                    st.warning(f"⚠️ Error: {str(e)}")
+                    model_available = False
+                
+                # Demo visualization when model or LIME is not available
+                if not model_available or not lime_available:
+                    st.info("🎨 **Demo Mode:** Showing simulated LIME visualization")
                     
                     # Create simplified demo
                     img_resized = cv2.resize(image_np, (224, 224))
                     
-                    # Create random superpixel segmentation
-                    from skimage.segmentation import slic
+                    # Create superpixel segmentation using SLIC
                     segments = slic(img_resized, n_segments=50, compactness=10, start_label=1)
                     
                     # Create demo importance scores
@@ -487,21 +602,33 @@ with tab2:
                     # Overlay
                     overlay = cv2.addWeighted(img_resized, 0.6, importance_colored, 0.4, 0)
                     
+                    # Simulate prediction
+                    class_names = MODEL_CONFIGS['crop_health']['class_names']
+                    demo_pred_label = np.random.choice(class_names)
+                    demo_confidence = np.random.uniform(75, 95)
+                    
+                    st.warning(f"🎭 **Demo Prediction:** {demo_pred_label} (Confidence: {demo_confidence:.1f}%)")
+                    st.caption("⚠️ This is a simulated result for demonstration purposes only")
+                    
                     col1, col2, col3 = st.columns(3)
                     
                     with col1:
-                        st.subheader("Original")
+                        st.subheader("Original Image")
                         st.image(img_resized, use_container_width=True)
                     
                     with col2:
+                        st.subheader("Superpixel Segmentation (Demo)")
+                        # Show segmentation boundaries
+                        from skimage.segmentation import mark_boundaries
+                        img_with_boundaries = mark_boundaries(img_resized / 255.0, segments)
+                        st.image(img_with_boundaries, use_container_width=True)
+                    
+                    with col3:
                         st.subheader("Importance Map (Demo)")
                         st.image(importance_colored, use_container_width=True)
                     
-                    with col3:
-                        st.subheader("Overlay (Demo)")
-                        st.image(overlay, use_container_width=True)
-                    
                     # Demo chart
+                    st.markdown("### 📊 Superpixel Importance (Demo)")
                     top_segments = sorted(importance.items(), key=lambda x: abs(x[1]), reverse=True)[:10]
                     segments_list = [f"Segment {x[0]}" for x in top_segments]
                     scores_list = [x[1] for x in top_segments]
@@ -519,7 +646,7 @@ with tab2:
                     ])
                     
                     fig.update_layout(
-                        title="Superpixel Importance (Demo)",
+                        title="Top 10 Superpixel Contributions (Demo)",
                         xaxis_title="Contribution Score",
                         yaxis_title="Superpixel",
                         height=500
@@ -528,21 +655,17 @@ with tab2:
                     st.plotly_chart(fig, use_container_width=True)
                     
                     st.info("""
-                    💡 **This is a demo visualization.**
-                    Install the LIME library for actual explanations based on your model predictions.
+                    💡 **How to Interpret (Demo):**
+                    - 🟢 **Green bars**: Positive contribution (would support the prediction)
+                    - 🔴 **Red bars**: Negative contribution (would oppose the prediction)
+                    - The image is divided into superpixels (small regions)
+                    - Each superpixel gets an importance score
                     
-                    The demo shows:
-                    - Image segmentation into superpixels
-                    - Random importance scores (for demonstration)
-                    - How LIME visualizations would look
+                    ⚠️ **Note:** This is a demonstration with random scores. For real LIME analysis:
+                    1. Model files need to be available
+                    2. LIME library must be installed
+                    3. Scores would be based on actual model predictions
                     """)
-                
-                except Exception as e:
-                    st.error(f"❌ Error: {str(e)}")
-                    st.info("Showing basic demo visualization...")
-                    
-                    img_resized = cv2.resize(image_np, (224, 224))
-                    st.image(img_resized, caption="Upload successful - Install LIME for full analysis", use_container_width=True)
 
 # ==================== TAB 3: SHAP ====================
 with tab3:

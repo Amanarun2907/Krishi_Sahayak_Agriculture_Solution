@@ -84,9 +84,16 @@ Features available in demo mode:
 - ✅ Upload and visualize images
 - ✅ Manual analysis tools
 - ✅ NDVI calculations
-- ✅ AI Chatbot
+- ✅ AI Chatbot (requires GROQ_API_KEY)
 - ✅ Physics-Informed simulations
+- ✅ Explainable AI demonstrations (Grad-CAM, LIME, SHAP)
 - ⚠️ No automatic predictions (requires models)
+
+**Explainable AI in Demo Mode:**
+- Shows simulated Grad-CAM heatmaps based on edge detection
+- Demonstrates how attention mechanisms work
+- Educational visualizations for understanding XAI concepts
+- Perfect for learning and presentations
 
 ---
 
