@@ -595,15 +595,24 @@ def create_chat_interface(sector_name: str, analysis_context: str = None, use_ap
                 from groq import Groq
                 
                 # Check if API key is available
-                if not GROQ_API_KEY or GROQ_API_KEY == "":
-                    response = """
+                if not GROQ_API_KEY or GROQ_API_KEY == "" or GROQ_API_KEY.strip() == "":
+                    response = f"""
                     ❌ **API Key Not Configured**
                     
-                    The GROQ API key is not set. To use the AI chatbot:
+                    The GROQ API key is not set or is empty.
                     
-                    1. Create a `.env` file in the project root
-                    2. Add your GROQ API key: `GROQ_API_KEY=your_key_here`
-                    3. Get a free API key from: https://console.groq.com
+                    **Debug Info:**
+                    - API Key exists: {GROQ_API_KEY is not None}
+                    - API Key length: {len(GROQ_API_KEY) if GROQ_API_KEY else 0}
+                    
+                    **To fix this:**
+                    
+                    1. **Check your .env file** in the project root
+                    2. Make sure it contains: `GROQ_API_KEY=your_key_here`
+                    3. **Restart Streamlit** - Stop the app (Ctrl+C) and run again
+                    4. Get a free API key from: https://console.groq.com
+                    
+                    **Important:** After updating .env, you MUST restart Streamlit!
                     
                     For now, you can use the demo mode or other features of the app.
                     """
