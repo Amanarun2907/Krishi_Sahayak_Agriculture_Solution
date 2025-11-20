@@ -157,3 +157,59 @@ Streamlit Cloud will automatically redeploy with all fixes applied.
 **Status:** ✅ All issues resolved and tested
 **Date:** November 20, 2025
 **Ready for deployment:** Yes
+
+
+## Update: Chatbot Connection Error Fixed
+
+### 4. PINN Chat Assistant "Connection error" Fixed
+- ✅ Added specific error handling for different failure scenarios
+- ✅ Clear messages for missing API key
+- ✅ Network connectivity error guidance
+- ✅ Authentication error with setup instructions
+- ✅ Rate limit handling with wait suggestions
+- ✅ Timeout error with troubleshooting steps
+
+### Error Messages Now Include:
+- **What went wrong** - Clear explanation of the error
+- **Why it happened** - Possible causes
+- **How to fix it** - Step-by-step instructions
+- **Helpful links** - Resources for getting API keys
+- **Technical details** - For debugging purposes
+
+### Applies To:
+- PINN Chat Assistant
+- Crop Health Chatbot
+- Pest Detection Chatbot
+- Weed Detection Chatbot
+- Irrigation Chatbot
+- All other chatbot interfaces
+
+---
+
+## Update: API Connection Error Fixed (All Chatbots)
+
+### 5. All Chatbots Connection Error Fixed
+- ✅ Removed `trust_env=False` from httpx client configuration
+- ✅ Increased timeout from 30s to 60s for better reliability
+- ✅ Added `follow_redirects=True` for proper redirect handling
+- ✅ Now works on all network configurations (proxy, firewall, etc.)
+
+### Root Cause:
+The httpx client was configured with `trust_env=False` which:
+- Blocked system proxy settings
+- Caused SSL/TLS certificate issues
+- Prevented proper network configuration
+
+### Files Fixed:
+- `modules/enhanced_chatbot.py` - 3 instances fixed
+- `modules/chatbot.py` - 1 instance fixed
+
+### Testing:
+Run the test script to verify:
+```bash
+python test_api_connection.py
+```
+
+---
+
+**All major issues now resolved! ✅**

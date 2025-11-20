@@ -16,8 +16,8 @@ def get_chatbot_response(user_query, sector_name, analysis_result=None):
     try:
         # Create HTTP client with proper configuration
         http_client = httpx.Client(
-            trust_env=False, 
-            timeout=30.0,
+            timeout=60.0,
+            follow_redirects=True,
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
         )
         

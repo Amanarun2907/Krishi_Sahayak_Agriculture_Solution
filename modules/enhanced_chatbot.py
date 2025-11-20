@@ -18,7 +18,7 @@ class EnhancedGroqChatbot:
     def test_api_connection(self) -> bool:
         """Test if API connection is working"""
         try:
-            http_client = httpx.Client(trust_env=False, timeout=10.0)
+            http_client = httpx.Client(timeout=10.0, follow_redirects=True)
             from groq import Groq
             client = Groq(api_key=self.api_key, http_client=http_client)
             
@@ -38,8 +38,8 @@ class EnhancedGroqChatbot:
     def get_response(self, user_query: str, system_prompt: str, analysis_context: str = None) -> str:
         """Get response from Groq API with enhanced error handling"""
         try:
-            # Create HTTP client
-            http_client = httpx.Client(trust_env=False, timeout=30.0)
+            # Create HTTP client with proper timeout and proxy support
+            http_client = httpx.Client(timeout=60.0, follow_redirects=True)
             
             # Initialize Groq client
             from groq import Groq
@@ -594,30 +594,114 @@ def create_chat_interface(sector_name: str, analysis_context: str = None, use_ap
                 import httpx
                 from groq import Groq
                 
-                system_prompt = CHATBOT_PROMPTS.get(sector_name, "You are a helpful agricultural assistant.")
-                http_client = httpx.Client(trust_env=False, timeout=30.0)
-                client = Groq(api_key=GROQ_API_KEY, http_client=http_client)
-                
-                context_message = f"Analysis: {analysis_context}\n\nQuestion: {user_input}" if analysis_context else user_input
-                
-                chat_completion = client.chat.completions.create(
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": context_message}
-                    ],
-                    model="llama-3.1-8b-instant",
-                    temperature=0.7,
-                    max_tokens=1500
-                )
-                
-                response = chat_completion.choices[0].message.content
+                # Check if API key is available
+                if not GROQ_API_KEY or GROQ_API_KEY == "":
+                    response = """
+                    ❌ **API Key Not Configured**
+                    
+                    The GROQ API key is not set. To use the AI chatbot:
+                    
+                    1. Create a `.env` file in the project root
+                    2. Add your GROQ API key: `GROQ_API_KEY=your_key_here`
+                    3. Get a free API key from: https://console.groq.com
+                    
+                    For now, you can use the demo mode or other features of the app.
+                    """
+                else:
+                    system_prompt = CHATBOT_PROMPTS.get(sector_name, "You are a helpful agricultural assistant.")
+                    # Create HTTP client with proper timeout and proxy support
+                    http_client = httpx.Client(timeout=60.0, follow_redirects=True)
+                    client = Groq(api_key=GROQ_API_KEY, http_client=http_client)
+                    
+                    context_message = f"Analysis: {analysis_context}\n\nQuestion: {user_input}" if analysis_context else user_input
+                    
+                    chat_completion = client.chat.completions.create(
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": context_message}
+                        ],
+                        model="llama-3.1-8b-instant",
+                        temperature=0.7,
+                        max_tokens=1500
+                    )
+                    
+                    response = chat_completion.choices[0].message.content
             else:
                 if f"foundational_chatbot_{sector_name}" not in st.session_state:
                     st.session_state[f"foundational_chatbot_{sector_name}"] = AdvancedFoundationalChatbot()
                 chatbot = st.session_state[f"foundational_chatbot_{sector_name}"]
                 response = chatbot.generate_response(user_input)
+        except httpx.ConnectError as e:
+            response = f"""
+            ❌ **Connection Error**
+            
+            Unable to connect to the Groq API server. This could be due to:
+            - Network connectivity issues
+            - Firewall blocking the connection
+            - Groq API service temporarily unavailable
+            
+            **What to try:**
+            1. Check your internet connection
+            2. Try again in a few moments
+            3. If on Streamlit Cloud, check if the API key is set in Secrets
+            
+            **Error details:** {str(e)}
+            """
+        except httpx.TimeoutException as e:
+            response = f"""
+            ⏱️ **Request Timeout**
+            
+            The request took too long to complete. This might be due to:
+            - Slow internet connection
+            - High server load
+            
+            **What to try:**
+            1. Try asking a simpler question
+            2. Wait a moment and try again
+            
+            **Error details:** {str(e)}
+            """
         except Exception as e:
-            response = f"Error: {str(e)}. Please try again."
+            error_msg = str(e).lower()
+            if "api key" in error_msg or "authentication" in error_msg or "401" in error_msg:
+                response = f"""
+                ❌ **API Authentication Error**
+                
+                The API key appears to be invalid or expired.
+                
+                **What to do:**
+                1. Check if your GROQ_API_KEY is correct in the `.env` file
+                2. Get a new API key from: https://console.groq.com
+                3. Make sure the key is properly set in Streamlit Cloud Secrets (if deployed)
+                
+                **Error details:** {str(e)}
+                """
+            elif "rate limit" in error_msg or "429" in error_msg:
+                response = f"""
+                ⚠️ **Rate Limit Exceeded**
+                
+                You've made too many requests in a short time.
+                
+                **What to do:**
+                1. Wait a few minutes before trying again
+                2. Consider upgrading your Groq API plan for higher limits
+                
+                **Error details:** {str(e)}
+                """
+            else:
+                response = f"""
+                ❌ **Unexpected Error**
+                
+                An error occurred while processing your request.
+                
+                **Error details:** {str(e)}
+                
+                **What to try:**
+                1. Check your internet connection
+                2. Verify your API key is valid
+                3. Try again in a few moments
+                4. If the problem persists, please report this issue
+                """
         
         # Add response
         st.session_state[chat_key].append({
